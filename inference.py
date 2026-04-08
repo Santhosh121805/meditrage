@@ -85,34 +85,47 @@ def reset_endpoint(task_id=None):
     3. JSON body: POST /reset with {"task_id": "task1_single_clear"}
     """
     try:
-        # Debug: log what we received
         import sys
         print(f"[DEBUG] reset_endpoint called with path task_id={task_id}", file=sys.stderr)
+        print(f"[DEBUG] Request full_path={request.full_path}", file=sys.stderr)
+        print(f"[DEBUG] Request method={request.method}", file=sys.stderr)
+        
+        # First try to get JSON body - this is most reliable
+        json_data = request.get_json(force=True, silent=True) or {}
+        print(f"[DEBUG] JSON body: {json_data}", file=sys.stderr)
         
         # Try to get task_id from multiple sources
         if not task_id:
-            data = request.get_json(force=True, silent=True) or {}
-            task_id = data.get("task_id") or request.args.get("task_id")
-            print(f"[DEBUG] Extracted from body/query: task_id={task_id}", file=sys.stderr)
+            # Try JSON body first
+            task_id = json_data.get("task_id")
+            if task_id:
+                print(f"[DEBUG] Got task_id from JSON body: {task_id}", file=sys.stderr)
+            
+            # If not in body, try query params
+            if not task_id:
+                task_id = request.args.get("task_id")
+                if task_id:
+                    print(f"[DEBUG] Got task_id from query param: {task_id}", file=sys.stderr)
+        else:
+            print(f"[DEBUG] Got task_id from path param: {task_id}", file=sys.stderr)
         
-        model_from_request = None
-        if task_id:
-            # If we got task_id from path, also check body/query for model
-            data = request.get_json(force=True, silent=True) or {}
-            model_from_request = data.get("model") or request.args.get("model")
-        
-        model = model_from_request or os.environ.get("MODEL_NAME", "gpt-4o")
+        # Get model from body or query
+        model = json_data.get("model") or request.args.get("model") or os.environ.get("MODEL_NAME", "gpt-4o")
         print(f"[DEBUG] Using model={model}", file=sys.stderr)
         
         if not task_id:
-            print(f"[DEBUG] No task_id found, returning error", file=sys.stderr)
+            print(f"[DEBUG] No task_id found anywhere!", file=sys.stderr)
+            print(f"[DEBUG] Request content-type: {request.content_type}", file=sys.stderr)
+            print(f"[DEBUG] Request data (raw): {request.data}", file=sys.stderr)
             return jsonify({
                 "error": "task_id required",
                 "debug": {
                     "path_param": task_id,
-                    "query_param": request.args.get("task_id"),
+                    "query_string": request.query_string.decode(),
+                    "json_body": json_data,
                     "request_method": request.method,
-                    "full_path": request.full_path
+                    "full_path": request.full_path,
+                    "content_type": request.content_type,
                 },
                 "usage": [
                     "POST /reset/task1_single_clear",
@@ -121,14 +134,15 @@ def reset_endpoint(task_id=None):
                 ]
             }), 400
         
-        print(f"[DEBUG] Initializing environment with task_id={task_id}", file=sys.stderr)
+        print(f"[DEBUG] Initializing environment with task_id={task_id}, model={model}", file=sys.stderr)
         env, client = _get_or_init_env_client(model)
         
         # Reset environment
         global _current_observation, _task_id
+        print(f"[DEBUG] Calling env.reset({task_id})", file=sys.stderr)
         _current_observation = env.reset(task_id)
         _task_id = task_id
-        print(f"[DEBUG] Reset complete, returning observation", file=sys.stderr)
+        print(f"[DEBUG] Reset complete, observation type: {type(_current_observation)}", file=sys.stderr)
         
         # Return observation as JSON
         if isinstance(_current_observation, Observation):
@@ -136,16 +150,18 @@ def reset_endpoint(task_id=None):
         else:
             obs_dict = _current_observation.model_dump()
         
+        print(f"[DEBUG] Returning reset response", file=sys.stderr)
         return jsonify({
             "status": "reset",
             "task_id": task_id,
+            "model": model,
             "observation": obs_dict
         }), 200
     
     except Exception as e:
         import traceback
         print(f"[ERROR] {str(e)}\n{traceback.format_exc()}", file=sys.stderr)
-        return jsonify({"error": str(e), "type": type(e).__name__}), 500
+        return jsonify({"error": str(e), "type": type(e).__name__, "traceback": traceback.format_exc()}), 500
 
 
 @app.route("/step", methods=["POST"])
