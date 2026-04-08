@@ -1,0 +1,12 @@
+include README.md
+include LICENSE
+include pyproject.toml
+include requirements.txt
+include openenv.yaml
+
+recursive-include data *.json
+recursive-include graders *.py
+recursive-include models *.py
+recursive-include tasks *.py
+recursive-include utils *.py
+recursive-include tests *.py
