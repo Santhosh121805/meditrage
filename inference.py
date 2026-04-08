@@ -207,20 +207,27 @@ def step_endpoint():
         reward, done, info = _env.step(action)
         print(f"[DEBUG] Step complete: reward={reward}, done={done}", file=sys.stderr)
         
-        # On next reset, observation will be updated
-        next_obs = _env.current_observation if hasattr(_env, 'current_observation') else None
-        next_obs_dict = next_obs.model_dump() if next_obs else None
-        
-        response = {
+        # Build minimal response to avoid serialization hangs
+        response_dict = {
             "status": "step",
             "reward": float(reward),
             "done": bool(done),
-            "info": info,
-            "observation": next_obs_dict
         }
         
-        print(f"[DEBUG] Returning response", file=sys.stderr)
-        return jsonify(response), 200
+        # Add info only if it's safe
+        if info:
+            try:
+                # Only include key fields from info
+                safe_info = {}
+                for key, val in info.items():
+                    if isinstance(val, (int, float, bool, str, type(None))):
+                        safe_info[key] = val
+                response_dict["info"] = safe_info
+            except:
+                response_dict["info"] = {}
+        
+        print(f"[DEBUG] Returning step response", file=sys.stderr)
+        return jsonify(response_dict), 200
     
     except Exception as e:
         import traceback
