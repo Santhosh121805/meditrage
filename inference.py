@@ -55,6 +55,24 @@ def _get_or_init_env_client(model: str):
     return _env, _client
 
 
+@app.route("/", methods=["GET"])
+def root_endpoint():
+    """Root endpoint - confirms server is running."""
+    return jsonify({"message": "MedTriage OpenEnv Server", "status": "running"}), 200
+
+
+@app.route("/tasks", methods=["GET"])
+def tasks_endpoint():
+    """List available tasks."""
+    return jsonify({
+        "tasks": [
+            "task1_single_clear",
+            "task2_ambiguous", 
+            "task3_batch_constrained"
+        ]
+    }), 200
+
+
 @app.route("/reset", methods=["POST"])
 def reset_endpoint():
     """

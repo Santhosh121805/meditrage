@@ -12,6 +12,10 @@ COPY . .
 # Generate patient notes on image build
 RUN python -c "from data_generator import generate; generate()" 2>/dev/null || true
 
-# Default command: run as Flask server (or CLI if --task argument provided locally)
-# On HF Spaces, RUNNING_ON_SPACES env var will be set and triggers server mode
-CMD ["python", "inference.py", "--server"]
+# Set environment variable to indicate running on HF Space
+ENV RUNNING_ON_SPACES=true
+ENV PYTHONUNBUFFERED=1
+
+# Run Flask server on port 7860 (HF Spaces standard)
+EXPOSE 7860
+CMD ["python", "-u", "inference.py", "--server"]
