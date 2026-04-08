@@ -1,0 +1,22 @@
+version = 4
+requires-python = ">=3.9"
+
+[[package]]
+name = "medtriage"
+version = "1.0.0"
+requires = [
+    "pydantic>=2.0",
+    "openai>=1.0.0",
+    "scipy>=1.10.0",
+    "numpy>=1.24.0",
+    "pytest>=7.0.0",
+    "rich>=13.0.0",
+    "typer>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "flask>=3.0.0",
+    "openenv-core>=0.2.0",
+]
+
+# Dependencies are managed through pyproject.toml
+# This lock file documents the resolved dependency tree
+# Generated for OpenEnv multi-mode deployment compatibility
