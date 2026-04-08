@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  medtriage:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./results:/app/results
+      - ./data:/app/data
+    command: python inference.py --model gpt-4o --task all --output /app/results/results.json

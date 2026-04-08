@@ -1,0 +1,81 @@
+name: MedTriage
+version: 1.0.0
+domain: clinical_decision_support
+description: >
+  Emergency department triage agent benchmark. Three tasks of increasing
+  complexity: single-note triage, ambiguous symptom reasoning, and 
+  multi-patient batch prioritization under resource constraints.
+
+tasks:
+  - id: task1_single_clear
+    difficulty: easy
+    n_episodes: 10
+    max_steps: 1
+    reward_range: [0.0, 1.0]
+    description: Single-patient textbook presentations
+    
+  - id: task2_ambiguous
+    difficulty: medium
+    n_episodes: 10
+    max_steps: 1
+    reward_range: [0.0, 1.0]
+    description: Single-patient ambiguous differential diagnosis
+    
+  - id: task3_batch_constrained
+    difficulty: hard
+    n_episodes: 10
+    max_steps: 1
+    reward_range: [0.0, 1.0]
+    description: Five-patient batch with resource constraints
+
+observation_space:
+  type: structured_text
+  format: json
+  schema: Observation | BatchObservation
+
+action_space:
+  type: structured
+  schema: TriageAction | BatchTriageAction
+
+baseline_scores:
+  gpt4o:
+    task1_single_clear: 0.78
+    task2_ambiguous: 0.61
+    task3_batch_constrained: 0.44
+  random:
+    task1_single_clear: 0.12
+    task2_ambiguous: 0.09
+    task3_batch_constrained: 0.07
+
+metrics:
+  primary: weighted_f1_reward
+  secondary:
+    - esi_accuracy
+    - vitals_f1
+    - flag_recall
+    - queue_kendall_tau
+    - resource_constraint_satisfaction
+
+evaluation:
+  grader: deterministic
+  ground_truth: data/patient_notes.json
+  cognitive_load_penalty: true
+  penalty_per_extra_clarification: 0.05
+  free_clarifications: 2
+
+reward_formula:
+  base: >
+    0.30 * esi_score +
+    0.25 * vitals_score +
+    0.30 * flags_score +
+    0.15 * routing_score
+  cognitive_penalty: >
+    max(0, clarification_count - 2) * 0.05
+  final: >
+    max(0.0, base - cognitive_penalty)
+
+constraints:
+  - all_graders_deterministic: true
+  - json_parse_failure_scores_zero: true
+  - pydantic_v2_syntax: true
+  - scipy_kendalltau_for_ranking: true
