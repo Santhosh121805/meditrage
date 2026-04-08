@@ -159,46 +159,69 @@ def step_endpoint():
     }
     """
     try:
+        import sys
         global _current_observation, _env, _client
         
+        print(f"[DEBUG] /step endpoint called", file=sys.stderr)
+        
         if _env is None or _current_observation is None:
+            print(f"[DEBUG] Environment not initialized", file=sys.stderr)
             return jsonify({"error": "environment not initialized, call /reset first"}), 400
+        
+        print(f"[DEBUG] Current observation type: {type(_current_observation)}", file=sys.stderr)
         
         # Force parse JSON regardless of Content-Type header
         data = request.get_json(force=True, silent=True) or {}
         action_data = data.get("action")
         
+        print(f"[DEBUG] Received action_data: {action_data is not None}", file=sys.stderr)
+        
         if not action_data:
+            print(f"[DEBUG] No action provided", file=sys.stderr)
             return jsonify({"error": "action required in request body"}), 400
+        
+        print(f"[DEBUG] Validating action as {type(_current_observation).__name__}", file=sys.stderr)
         
         try:
             # Parse and validate action based on observation type
             if isinstance(_current_observation, Observation):
+                print(f"[DEBUG] Parsing as TriageAction", file=sys.stderr)
                 action = TriageAction(**action_data)
             else:
+                print(f"[DEBUG] Parsing as BatchTriageAction", file=sys.stderr)
                 action = BatchTriageAction(**action_data)
+            
+            print(f"[DEBUG] Action validated successfully", file=sys.stderr)
         except Exception as validation_error:
+            print(f"[DEBUG] Action validation failed: {validation_error}", file=sys.stderr)
             return jsonify({
                 "error": f"action validation failed: {str(validation_error)}",
                 "expected_schema": "TriageAction or BatchTriageAction"
             }), 400
         
         # Execute step
+        print(f"[DEBUG] Executing step with action", file=sys.stderr)
         reward, done, info = _env.step(action)
+        print(f"[DEBUG] Step complete: reward={reward}, done={done}", file=sys.stderr)
         
         # On next reset, observation will be updated
         next_obs = _env.current_observation if hasattr(_env, 'current_observation') else None
         next_obs_dict = next_obs.model_dump() if next_obs else None
         
-        return jsonify({
+        response = {
             "status": "step",
             "reward": float(reward),
             "done": bool(done),
             "info": info,
             "observation": next_obs_dict
-        }), 200
+        }
+        
+        print(f"[DEBUG] Returning response", file=sys.stderr)
+        return jsonify(response), 200
     
     except Exception as e:
+        import traceback
+        print(f"[ERROR in /step] {str(e)}\n{traceback.format_exc()}", file=sys.stderr)
         return jsonify({"error": str(e), "type": type(e).__name__}), 500
 
 
