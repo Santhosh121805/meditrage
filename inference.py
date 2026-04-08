@@ -117,22 +117,9 @@ def reset_endpoint(task_id=None):
             print(f"[DEBUG] No task_id found anywhere!", file=sys.stderr)
             print(f"[DEBUG] Request content-type: {request.content_type}", file=sys.stderr)
             print(f"[DEBUG] Request data (raw): {request.data}", file=sys.stderr)
-            return jsonify({
-                "error": "task_id required",
-                "debug": {
-                    "path_param": task_id,
-                    "query_string": request.query_string.decode(),
-                    "json_body": json_data,
-                    "request_method": request.method,
-                    "full_path": request.full_path,
-                    "content_type": request.content_type,
-                },
-                "usage": [
-                    "POST /reset/task1_single_clear",
-                    "POST /reset?task_id=task1_single_clear",
-                    "POST /reset with JSON body {\"task_id\": \"task1_single_clear\"}"
-                ]
-            }), 400
+            print(f"[DEBUG] Using default task_id: task1_single_clear", file=sys.stderr)
+            # Default to first task if not specified
+            task_id = "task1_single_clear"
         
         print(f"[DEBUG] Initializing environment with task_id={task_id}, model={model}", file=sys.stderr)
         env, client = _get_or_init_env_client(model)
