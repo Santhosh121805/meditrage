@@ -260,5 +260,17 @@ def run_server(port: int = 7860, debug: bool = False):
     app.run(host="0.0.0.0", port=port, debug=debug, threaded=True)
 
 
+def main():
+    """Main entry point for server execution."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="MedTriage OpenEnv Flask Server")
+    parser.add_argument("--port", type=int, default=7860, help="Port to run server on (default: 7860)")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+    
+    args = parser.parse_args()
+    run_server(port=args.port, debug=args.debug)
+
+
 if __name__ == "__main__":
-    run_server()
+    main()

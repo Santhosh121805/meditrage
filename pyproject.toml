@@ -58,7 +58,7 @@ homepage = "https://huggingface.co/spaces/sandy0042v/meditage"
 
 [project.scripts]
 medtriage = "inference:main"
-server = "server.app:run_server"
+server = "server.app:main"
 
 [tool.setuptools]
 packages = ["models", "graders", "tasks", "utils", "tests"]

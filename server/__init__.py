@@ -1,5 +1,5 @@
 """MedTriage OpenEnv Flask Server package."""
 
-from .app import app, run_server
+from .app import app, main, run_server
 
-__all__ = ["app", "run_server"]
+__all__ = ["app", "main", "run_server"]
