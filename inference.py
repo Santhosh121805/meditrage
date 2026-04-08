@@ -78,20 +78,18 @@ def reset_endpoint():
     """
     Reset environment to start a new episode.
     
-    Expected JSON body:
-    {
-        "task_id": "task1_single_clear",
-        "model": "gpt-4o"  (optional, defaults to MODEL_NAME env var)
-    }
+    Accepts task_id as:
+    - JSON body: {"task_id": "task1_single_clear"}
+    - Query parameter: /reset?task_id=task1_single_clear
     """
     try:
-        # Force parse JSON regardless of Content-Type header
+        # Try to get task_id from JSON first, then query params
         data = request.get_json(force=True, silent=True) or {}
-        task_id = data.get("task_id")
-        model = data.get("model", os.environ.get("MODEL_NAME", "gpt-4o"))
+        task_id = data.get("task_id") or request.args.get("task_id")
+        model = data.get("model") or request.args.get("model") or os.environ.get("MODEL_NAME", "gpt-4o")
         
         if not task_id:
-            return jsonify({"error": "task_id required"}), 400
+            return jsonify({"error": "task_id required (provide in JSON body or query param)"}), 400
         
         env, client = _get_or_init_env_client(model)
         
@@ -113,7 +111,7 @@ def reset_endpoint():
         }), 200
     
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e), "type": type(e).__name__}), 500
 
 
 @app.route("/step", methods=["POST"])
@@ -137,13 +135,19 @@ def step_endpoint():
         action_data = data.get("action")
         
         if not action_data:
-            return jsonify({"error": "action required"}), 400
+            return jsonify({"error": "action required in request body"}), 400
         
-        # Parse and validate action based on observation type
-        if isinstance(_current_observation, Observation):
-            action = TriageAction(**action_data)
-        else:
-            action = BatchTriageAction(**action_data)
+        try:
+            # Parse and validate action based on observation type
+            if isinstance(_current_observation, Observation):
+                action = TriageAction(**action_data)
+            else:
+                action = BatchTriageAction(**action_data)
+        except Exception as validation_error:
+            return jsonify({
+                "error": f"action validation failed: {str(validation_error)}",
+                "expected_schema": "TriageAction or BatchTriageAction"
+            }), 400
         
         # Execute step
         reward, done, info = _env.step(action)
@@ -161,7 +165,7 @@ def step_endpoint():
         }), 200
     
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e), "type": type(e).__name__}), 500
 
 
 @app.route("/health", methods=["GET"])
