@@ -18,6 +18,7 @@ from openai import OpenAI, RateLimitError
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
+from flask import Flask, request, jsonify
 
 # Load environment variables from .env file
 load_dotenv()
@@ -32,8 +33,122 @@ np.random.seed(42)
 
 console = Console()
 
+# ============ Flask Server Setup ============
+app = Flask(__name__)
 
-# Initialize LLM client (OpenAI-compatible)
+# Global state for OpenEnv API
+_env = None
+_client = None
+_current_observation = None
+_model_name = None
+_task_id = None
+
+
+def _get_or_init_env_client(model: str):
+    """Initialize environment and client if not already done."""
+    global _env, _client, _model_name
+    if _env is None:
+        _env = MedTriageEnv()
+    if _client is None or model != _model_name:
+        _client = get_llm_client(model)
+        _model_name = model
+    return _env, _client
+
+
+@app.route("/reset", methods=["POST"])
+def reset_endpoint():
+    """
+    Reset environment to start a new episode.
+    
+    Expected JSON body:
+    {
+        "task_id": "task1_single_clear",
+        "model": "gpt-4o"  (optional, defaults to MODEL_NAME env var)
+    }
+    """
+    try:
+        data = request.json or {}
+        task_id = data.get("task_id")
+        model = data.get("model", os.environ.get("MODEL_NAME", "gpt-4o"))
+        
+        if not task_id:
+            return jsonify({"error": "task_id required"}), 400
+        
+        env, client = _get_or_init_env_client(model)
+        
+        # Reset environment
+        global _current_observation, _task_id
+        _current_observation = env.reset(task_id)
+        _task_id = task_id
+        
+        # Return observation as JSON
+        if isinstance(_current_observation, Observation):
+            obs_dict = _current_observation.model_dump()
+        else:
+            obs_dict = _current_observation.model_dump()
+        
+        return jsonify({
+            "status": "reset",
+            "task_id": task_id,
+            "observation": obs_dict
+        }), 200
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/step", methods=["POST"])
+def step_endpoint():
+    """
+    Execute one step in the environment.
+    
+    Expected JSON body:
+    {
+        "action": { ... action data ... }
+    }
+    """
+    try:
+        global _current_observation, _env, _client
+        
+        if _env is None or _current_observation is None:
+            return jsonify({"error": "environment not initialized, call /reset first"}), 400
+        
+        data = request.json or {}
+        action_data = data.get("action")
+        
+        if not action_data:
+            return jsonify({"error": "action required"}), 400
+        
+        # Parse and validate action based on observation type
+        if isinstance(_current_observation, Observation):
+            action = TriageAction(**action_data)
+        else:
+            action = BatchTriageAction(**action_data)
+        
+        # Execute step
+        reward, done, info = _env.step(action)
+        
+        # On next reset, observation will be updated
+        next_obs = _env.current_observation if hasattr(_env, 'current_observation') else None
+        next_obs_dict = next_obs.model_dump() if next_obs else None
+        
+        return jsonify({
+            "status": "step",
+            "reward": float(reward),
+            "done": bool(done),
+            "info": info,
+            "observation": next_obs_dict
+        }), 200
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/health", methods=["GET"])
+def health_endpoint():
+    """Health check endpoint."""
+    return jsonify({"status": "ok"}), 200
+
 def get_llm_client(model: str) -> OpenAI:
     """
     Initialize OpenAI-compatible client using HF_TOKEN and API_BASE_URL.
@@ -340,7 +455,7 @@ def test_inference(model: str, task_id: str, num_episodes: int = 3) -> Dict[str,
 
 
 def main():
-    """CLI entry point."""
+    """CLI entry point or server launcher."""
     # Get default model from environment or fallback
     default_model = os.environ.get("MODEL_NAME", "gpt-4o")
     
@@ -349,9 +464,18 @@ def main():
     parser.add_argument("--task", default="all", help="Task: task1, task2, task3, or all (default: all)")
     parser.add_argument("--output", default="results.json", help="Output file (default: results.json)")
     parser.add_argument("--episodes", type=int, default=3, help="Episodes per task (default: 3)")
+    parser.add_argument("--server", action="store_true", help="Run as Flask server instead of CLI")
     
     args = parser.parse_args()
     
+    # Run Flask server if --server flag or RUNNING_ON_SPACES env var is set
+    if args.server or os.environ.get("RUNNING_ON_SPACES"):
+        port = int(os.environ.get("PORT", 7860))
+        console.print(f"[bold green]Starting MedTriage OpenEnv server on port {port}...[/bold green]")
+        app.run(host="0.0.0.0", port=port, debug=False)
+        return
+    
+    # Otherwise run CLI mode
     tasks = {
         "task1": "task1_single_clear",
         "task2": "task2_ambiguous",
