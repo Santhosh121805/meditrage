@@ -73,8 +73,8 @@ def tasks_endpoint():
     }), 200
 
 
-@app.route("/reset", methods=["POST"])
-@app.route("/reset/<task_id>", methods=["POST"])
+@app.route("/reset", methods=["POST", "GET"])
+@app.route("/reset/<task_id>", methods=["POST", "GET"])
 def reset_endpoint(task_id=None):
     """
     Reset environment to start a new episode.
@@ -85,10 +85,15 @@ def reset_endpoint(task_id=None):
     3. JSON body: POST /reset with {"task_id": "task1_single_clear"}
     """
     try:
-        # Try to get task_id from JSON body or query params if not in path
+        # Debug: log what we received
+        import sys
+        print(f"[DEBUG] reset_endpoint called with path task_id={task_id}", file=sys.stderr)
+        
+        # Try to get task_id from multiple sources
         if not task_id:
             data = request.get_json(force=True, silent=True) or {}
             task_id = data.get("task_id") or request.args.get("task_id")
+            print(f"[DEBUG] Extracted from body/query: task_id={task_id}", file=sys.stderr)
         
         model_from_request = None
         if task_id:
@@ -97,10 +102,18 @@ def reset_endpoint(task_id=None):
             model_from_request = data.get("model") or request.args.get("model")
         
         model = model_from_request or os.environ.get("MODEL_NAME", "gpt-4o")
+        print(f"[DEBUG] Using model={model}", file=sys.stderr)
         
         if not task_id:
+            print(f"[DEBUG] No task_id found, returning error", file=sys.stderr)
             return jsonify({
                 "error": "task_id required",
+                "debug": {
+                    "path_param": task_id,
+                    "query_param": request.args.get("task_id"),
+                    "request_method": request.method,
+                    "full_path": request.full_path
+                },
                 "usage": [
                     "POST /reset/task1_single_clear",
                     "POST /reset?task_id=task1_single_clear",
@@ -108,12 +121,14 @@ def reset_endpoint(task_id=None):
                 ]
             }), 400
         
+        print(f"[DEBUG] Initializing environment with task_id={task_id}", file=sys.stderr)
         env, client = _get_or_init_env_client(model)
         
         # Reset environment
         global _current_observation, _task_id
         _current_observation = env.reset(task_id)
         _task_id = task_id
+        print(f"[DEBUG] Reset complete, returning observation", file=sys.stderr)
         
         # Return observation as JSON
         if isinstance(_current_observation, Observation):
@@ -128,6 +143,8 @@ def reset_endpoint(task_id=None):
         }), 200
     
     except Exception as e:
+        import traceback
+        print(f"[ERROR] {str(e)}\n{traceback.format_exc()}", file=sys.stderr)
         return jsonify({"error": str(e), "type": type(e).__name__}), 500
 
 
@@ -189,6 +206,20 @@ def step_endpoint():
 def health_endpoint():
     """Health check endpoint."""
     return jsonify({"status": "ok"}), 200
+
+
+@app.route("/debug", methods=["GET", "POST"])
+def debug_endpoint():
+    """Debug endpoint to inspect incoming requests."""
+    return jsonify({
+        "method": request.method,
+        "path": request.path,
+        "full_path": request.full_path,
+        "args": dict(request.args),
+        "json_body": request.get_json(force=True, silent=True),
+        "headers": dict(request.headers),
+        "remote_addr": request.remote_addr
+    }), 200
 
 def get_llm_client(model: str) -> OpenAI:
     """
