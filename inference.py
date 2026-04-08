@@ -67,7 +67,8 @@ def reset_endpoint():
     }
     """
     try:
-        data = request.json or {}
+        # Force parse JSON regardless of Content-Type header
+        data = request.get_json(force=True, silent=True) or {}
         task_id = data.get("task_id")
         model = data.get("model", os.environ.get("MODEL_NAME", "gpt-4o"))
         
@@ -113,7 +114,8 @@ def step_endpoint():
         if _env is None or _current_observation is None:
             return jsonify({"error": "environment not initialized, call /reset first"}), 400
         
-        data = request.json or {}
+        # Force parse JSON regardless of Content-Type header
+        data = request.get_json(force=True, silent=True) or {}
         action_data = data.get("action")
         
         if not action_data:
