@@ -74,22 +74,39 @@ def tasks_endpoint():
 
 
 @app.route("/reset", methods=["POST"])
-def reset_endpoint():
+@app.route("/reset/<task_id>", methods=["POST"])
+def reset_endpoint(task_id=None):
     """
     Reset environment to start a new episode.
     
-    Accepts task_id as:
-    - JSON body: {"task_id": "task1_single_clear"}
-    - Query parameter: /reset?task_id=task1_single_clear
+    Accepts task_id from multiple sources (in priority order):
+    1. URL path: POST /reset/task1_single_clear
+    2. Query parameter: POST /reset?task_id=task1_single_clear
+    3. JSON body: POST /reset with {"task_id": "task1_single_clear"}
     """
     try:
-        # Try to get task_id from JSON first, then query params
-        data = request.get_json(force=True, silent=True) or {}
-        task_id = data.get("task_id") or request.args.get("task_id")
-        model = data.get("model") or request.args.get("model") or os.environ.get("MODEL_NAME", "gpt-4o")
+        # Try to get task_id from JSON body or query params if not in path
+        if not task_id:
+            data = request.get_json(force=True, silent=True) or {}
+            task_id = data.get("task_id") or request.args.get("task_id")
+        
+        model_from_request = None
+        if task_id:
+            # If we got task_id from path, also check body/query for model
+            data = request.get_json(force=True, silent=True) or {}
+            model_from_request = data.get("model") or request.args.get("model")
+        
+        model = model_from_request or os.environ.get("MODEL_NAME", "gpt-4o")
         
         if not task_id:
-            return jsonify({"error": "task_id required (provide in JSON body or query param)"}), 400
+            return jsonify({
+                "error": "task_id required",
+                "usage": [
+                    "POST /reset/task1_single_clear",
+                    "POST /reset?task_id=task1_single_clear",
+                    "POST /reset with JSON body {\"task_id\": \"task1_single_clear\"}"
+                ]
+            }), 400
         
         env, client = _get_or_init_env_client(model)
         
