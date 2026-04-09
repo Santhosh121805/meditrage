@@ -573,11 +573,20 @@ def main():
     
     args = parser.parse_args()
     
-    # Run Flask server if --server flag or RUNNING_ON_SPACES env var is set
-    if args.server or os.environ.get("RUNNING_ON_SPACES"):
-        port = int(os.environ.get("PORT", 7860))
-        console.print(f"[bold green]Starting MedTriage OpenEnv server on port {port}...[/bold green]")
-        app.run(host="0.0.0.0", port=port, debug=False)
+    # Run Flask server ONLY if --server flag is explicitly passed
+    # Do NOT auto-start server based on RUNNING_ON_SPACES env var
+    # That's handled by Dockerfile CMD which explicitly passes --server
+    if args.server:
+        try:
+            port = int(os.environ.get("PORT", 7860))
+            console.print(f"[bold green]Starting MedTriage OpenEnv server on port {port}...[/bold green]")
+            app.run(host="0.0.0.0", port=port, debug=False)
+        except OSError as e:
+            if "Address already in use" in str(e):
+                console.print(f"[bold red]Error: Port {port} is already in use[/bold red]")
+                console.print(f"[yellow]Try: --server --port {port + 1000}[/yellow]")
+                sys.exit(1)
+            raise
         return
     
     # Otherwise run CLI mode
